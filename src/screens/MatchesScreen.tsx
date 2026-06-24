@@ -16,7 +16,7 @@ export default function MatchesScreen() {
   useEffect(() => {
     load();
 
-    const interval = setInterval(load, 10000); // 🔴 más real-time
+    const interval = setInterval(load, 10000);
 
     return () => clearInterval(interval);
   }, []);
@@ -26,82 +26,180 @@ export default function MatchesScreen() {
       const data = await getLiveMatches();
       setMatches(data);
     } catch (err) {
-      console.log("Error loading matches:", err);
+      console.log(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getStatusLabel = (item: any) => {
+  // 🧠 Estado en español
+  const getStatusES = (item: any) => {
     const status = item.fixture.status.short;
     const elapsed = item.fixture.status.elapsed;
 
-    // 🔴 EN VIVO
-    if (status === "1H" || status === "2H" || status === "LIVE") {
+    if (status === "1H" || status === "2H") {
       return `🔴 EN VIVO • ${elapsed || 0}'`;
     }
-
-    // ⏳ ENTRETIEMPO
-    if (status === "HT") {
-      return "⏸ DESCANSO";
-    }
-
-    // ✔ TERMINADO
-    if (status === "FT") {
-      return "✔ FINALIZADO";
-    }
+    if (status === "HT") return "⏸ DESCANSO";
+    if (status === "FT") return "✔ FINALIZADO";
 
     return item.fixture.status.long;
   };
 
-  const renderMatch = ({ item }: any) => {
-    const home = item.teams.home.name;
-    const away = item.teams.away.name;
+  // ⚽ GOLES SEPARADOS POR EQUIPO (FIX REAL)
+  const renderGoalsByTeam = (
+    events: any[],
+    homeId: number,
+    awayId: number
+  ) => {
+    if (!events || events.length === 0) {
+      return (
+        <Text style={styles.subText}>
+          ⚽ Sin goles aún
+        </Text>
+      );
+    }
 
-    const homeGoals = item.goals.home ?? 0;
-    const awayGoals = item.goals.away ?? 0;
+    const homeGoals = events.filter(
+      (e: any) =>
+        e.type === "Goal" &&
+        e.team.id === homeId
+    );
 
-    const isLive =
-      item.fixture.status.short === "1H" ||
-      item.fixture.status.short === "2H";
+    const awayGoals = events.filter(
+      (e: any) =>
+        e.type === "Goal" &&
+        e.team.id === awayId
+    );
 
     return (
-      <View style={[styles.card, isLive && styles.liveCard]}>
-        {/* League */}
-        <Text style={styles.league}>
-          🏆 {item.league.name}
+      <View>
+        {/* 🏠 LOCAL */}
+        <Text style={styles.sectionTitle}>
+          🏠 Local
         </Text>
 
-        {/* Teams + Score */}
+        {homeGoals.length > 0 ? (
+          homeGoals.map((g: any, i: number) => (
+            <Text key={i} style={styles.goalText}>
+              ⚽ {g.player.name} ({g.time.elapsed}')
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.subText}>Sin goles</Text>
+        )}
+
+        {/* 🚀 VISITANTE */}
+        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>
+          🚀 Visitante
+        </Text>
+
+        {awayGoals.length > 0 ? (
+          awayGoals.map((g: any, i: number) => (
+            <Text key={i} style={styles.goalText}>
+              ⚽ {g.player.name} ({g.time.elapsed}')
+            </Text>
+          ))
+        ) : (
+          <Text style={styles.subText}>Sin goles</Text>
+        )}
+      </View>
+    );
+  };
+
+  // 📊 ESTADÍSTICAS
+  const renderStats = (stats: any[]) => {
+    if (!stats || stats.length === 0) return null;
+
+    const find = (teamStats: any[], type: string) =>
+      teamStats?.find((s) => s.type === type)?.value || "0";
+
+    const home = stats[0]?.statistics;
+    const away = stats[1]?.statistics;
+
+    return (
+      <View style={styles.statsBox}>
+        <Text style={styles.statsTitle}>
+          📊 Estadísticas
+        </Text>
+
+        <Text style={styles.statsText}>
+          ⚽ Tiros: {find(home, "Total Shots")} - {find(away, "Total Shots")}
+        </Text>
+
+        <Text style={styles.statsText}>
+          🎯 Al arco: {find(home, "Shots on Goal")} - {find(away, "Shots on Goal")}
+        </Text>
+
+        <Text style={styles.statsText}>
+          🚩 Corners: {find(home, "Corner Kicks")} - {find(away, "Corner Kicks")}
+        </Text>
+
+        <Text style={styles.statsText}>
+          ⏱ Posesión: {find(home, "Ball Possession")} - {find(away, "Ball Possession")}
+        </Text>
+      </View>
+    );
+  };
+
+  const renderMatch = ({ item }: any) => {
+    const home = item.teams.home;
+    const away = item.teams.away;
+
+    return (
+      <View style={styles.card}>
+        <Text style={styles.league}>
+          {item.league.name}
+        </Text>
+
+        {/* SCORE */}
         <View style={styles.row}>
-          <Text style={styles.team}>{home}</Text>
+          <Text style={styles.team}>{home.name}</Text>
 
           <View style={styles.scoreBox}>
             <Text style={styles.score}>
-              {homeGoals} - {awayGoals}
+              {item.goals.home ?? 0} - {item.goals.away ?? 0}
             </Text>
           </View>
 
-          <Text style={styles.team}>{away}</Text>
+          <Text style={styles.team}>{away.name}</Text>
         </View>
 
-        {/* Status */}
-        <Text style={[styles.status, isLive && styles.liveStatus]}>
-          {getStatusLabel(item)}
+        {/* ESTADO */}
+        <Text style={styles.status}>
+          {getStatusES(item)}
         </Text>
+
+        {/* ⚽ GOLES */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            ⚽ Goleadores
+          </Text>
+
+          {renderGoalsByTeam(
+            item.events,
+            home.id,
+            away.id
+          )}
+        </View>
+
+        {/* 📊 STATS */}
+        {renderStats(item.statistics)}
       </View>
     );
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>⚽ Live Scores</Text>
+      <Text style={styles.title}>
+        ⚽ Partidos en Vivo
+      </Text>
 
       {loading && matches.length === 0 ? (
-        <ActivityIndicator size="large" color="#22c55e" />
+        <ActivityIndicator size="large" color="#000" />
       ) : matches.length === 0 ? (
         <Text style={styles.empty}>
-          🔴 No hay partidos en vivo ahora mismo
+          No hay partidos disponibles
         </Text>
       ) : (
         <FlatList
@@ -120,35 +218,33 @@ export default function MatchesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b1220",
-    padding: 15,
+    backgroundColor: "#f5f5f7",
+    padding: 16,
   },
 
   title: {
-    color: "#fff",
-    fontSize: 30,
-    fontWeight: "bold",
-    marginBottom: 15,
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#111",
+    marginBottom: 20,
   },
 
   card: {
-    backgroundColor: "#111827",
-    padding: 15,
+    backgroundColor: "#fff",
+    padding: 16,
     borderRadius: 18,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
 
-  liveCard: {
-    borderColor: "#ef4444",
-    shadowColor: "#ef4444",
-    shadowOpacity: 0.4,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
 
   league: {
-    color: "#94a3b8",
     fontSize: 12,
+    color: "#8e8e93",
     marginBottom: 10,
   },
 
@@ -159,40 +255,83 @@ const styles = StyleSheet.create({
   },
 
   team: {
-    color: "#fff",
-    fontSize: 14,
     flex: 1,
     textAlign: "center",
+    fontSize: 15,
+    color: "#1c1c1e",
+    fontWeight: "500",
   },
 
   scoreBox: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#0f172a",
-    borderRadius: 10,
+    backgroundColor: "#f0f0f3",
+    borderRadius: 12,
   },
 
   score: {
-    color: "#22c55e",
-    fontSize: 20,
-    fontWeight: "bold",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111",
   },
 
   status: {
     marginTop: 10,
-    color: "#60a5fa",
     fontSize: 12,
+    color: "#8e8e93",
     textAlign: "center",
   },
 
-  liveStatus: {
-    color: "#ef4444",
-    fontWeight: "bold",
+  section: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#111",
+    marginBottom: 6,
+  },
+
+  goalText: {
+    fontSize: 12,
+    color: "#1c1c1e",
+    marginLeft: 6,
+    marginBottom: 2,
+  },
+
+  subText: {
+    fontSize: 12,
+    color: "#8e8e93",
+    marginLeft: 6,
+  },
+
+  statsBox: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: "#f9f9fb",
+    borderRadius: 12,
+  },
+
+  statsTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 6,
+    color: "#111",
+  },
+
+  statsText: {
+    fontSize: 12,
+    color: "#444",
+    marginBottom: 2,
   },
 
   empty: {
-    color: "#94a3b8",
     textAlign: "center",
     marginTop: 20,
+    color: "#8e8e93",
   },
 });
